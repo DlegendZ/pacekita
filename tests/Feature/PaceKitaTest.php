@@ -25,7 +25,7 @@ class PaceKitaTest extends TestCase
 
     public function test_suite_uses_isolated_sqlite_database(): void
     {
-        $this->assertSame('sqlite', \Illuminate\Support\Facades\DB::getDriverName());
+        $this->assertSame('sqlite', DB::getDriverName());
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
     }
 
