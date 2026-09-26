@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title', 'Start a club')
+@section('content')
+<div class="shell narrow-page"><span class="kicker">BRING PEOPLE TOGETHER</span><h1>Start a <em>club.</em></h1><p>Give your crew a place to call home.</p><form method="post" action="{{ route('clubs.store') }}" class="form-card form-stack">@csrf<label>Club name<input name="name" value="{{ old('name') }}" required maxlength="120"></label><label>City<input name="city" value="{{ old('city') }}" required></label><label>What’s your club about?<textarea name="description" required maxlength="3000">{{ old('description') }}</textarea></label><label>Visibility<select name="visibility"><option value="public">Public</option><option value="private">Private</option></select></label><label>Joining<select name="join_policy"><option value="open">Open to everyone</option><option value="approval">Request approval</option></select></label><button class="button button-lime" type="submit">Create club ↗</button></form></div>
+@endsection

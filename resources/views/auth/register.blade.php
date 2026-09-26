@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title', 'Join PaceKita')
+@section('content')
+<div class="auth-page shell"><div class="auth-intro"><span class="kicker">GOOD THINGS START HERE</span><h1>Find your<br><em>people.</em></h1><p>One account. A whole city of runs to discover.</p></div><div class="form-card"><h2>Create account</h2><p>Already with us? <a href="{{ route('login') }}">Log in</a></p><form method="post" action="{{ route('register') }}" class="form-stack">@csrf<label>Your name<input name="name" value="{{ old('name') }}" required autocomplete="name" maxlength="100"></label><label>Email address<input type="email" name="email" value="{{ old('email') }}" required autocomplete="email"></label><label>Password <small>At least 12 characters</small><input type="password" name="password" required minlength="12" autocomplete="new-password"></label><label>Confirm password<input type="password" name="password_confirmation" required autocomplete="new-password"></label><button class="button button-lime" type="submit">Create account ↗</button></form></div></div>
+@endsection
