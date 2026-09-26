@@ -19,6 +19,8 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    protected $attributes = ['status' => 'active', 'is_admin' => false];
+
     public function profile(): HasOne { return $this->hasOne(Profile::class); }
     public function memberships(): HasMany { return $this->hasMany(ClubMembership::class); }
     public function rsvps(): HasMany { return $this->hasMany(Rsvp::class); }

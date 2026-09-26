@@ -87,6 +87,7 @@ return new class extends Migration
             $table->timestamp('waitlisted_at')->nullable();
             $table->timestamp('confirmed_at')->nullable();
             $table->timestamp('checked_in_at')->nullable();
+            $table->timestamp('reminder_sent_at')->nullable();
             $table->timestamps();
             $table->unique(['occurrence_id', 'user_id']);
             $table->index(['occurrence_id', 'status', 'waitlisted_at', 'id']);

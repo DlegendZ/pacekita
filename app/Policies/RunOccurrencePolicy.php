@@ -9,6 +9,9 @@ class RunOccurrencePolicy
 {
     public function view(?User $user, RunOccurrence $occurrence): bool
     {
+        if ($occurrence->status === 'canceled' && $user) {
+            return $occurrence->run->club->isOrganizer($user) || $occurrence->rsvps()->where('user_id', $user->id)->exists();
+        }
         if ($occurrence->status !== 'published' || $occurrence->run->club->status !== 'active') return false;
         if ($occurrence->visibility === 'public' && $occurrence->run->club->visibility === 'public') return true;
         return $user && $occurrence->run->club->hasMember($user);

@@ -1,58 +1,44 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# PaceKita
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+PaceKita is a Laravel 13, Blade, PostgreSQL-ready running-club website built from `../Running_Club_Website_SRD.docx`. It covers public run and club discovery, email-verified accounts, profiles, memberships, organizer scheduling, RSVP/waitlist, in-site and email notices, attendance, reporting, and admin audit.
 
-## About Laravel
+## Quick start
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Requirements: PHP 8.3+, Composer 2, Node.js 20+, npm, and PostgreSQL 15+ (or SQLite for a local demo). Run commands from `pacekita`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+composer install
+npm ci
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Set `DB_*` values in `.env` for PostgreSQL, create the database, then:
 
-## Contributing
+```sh
+php artisan migrate
+php artisan storage:link
+php artisan db:seed
+npm run build
+php artisan serve
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+For an SQLite demo, set `DB_CONNECTION=sqlite` and `DB_DATABASE=/absolute/path/to/database/database.sqlite` in `.env`, create the empty database file, then migrate and seed. Seeder runs only in local environment. Demo organizer: `demo@pacekita.test` / `password12345`; change password or delete account before using real data. Mail uses log driver by default; verification links appear in `storage/logs/laravel.log`. Run `php artisan queue:work` and `php artisan schedule:work` in separate terminals for notifications, recurrence, and reminders.
 
-## Code of Conduct
+## Test
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```sh
+php artisan test
+npm run build
+```
 
-## Security Vulnerabilities
+Tests use in-memory SQLite. Production reference uses PostgreSQL to serialize competing seat claims through `lockForUpdate` on occurrence rows. Run concurrency/load tests against PostgreSQL before release; SQLite does not validate row-lock behavior.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Production checklist
 
-## License
+- Set unique `APP_KEY`, `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://...`, PostgreSQL, mail, queue, and session secrets outside source control.
+- Build assets, migrate with backup/rollback plan, run one queue worker and one scheduler, and monitor failed jobs/backups.
+- Configure HTTPS, secure cookies, private file access, email provider, retention/deletion terms, safety/incident policy, and local legal review before launch.
+- Verify responsive/keyboard accessibility and load targets; SRD’s 100-concurrent-user search target is not yet benchmarked.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+No separate SPA or API service is needed. `routes/web.php` uses session auth and CSRF; domain mutations live in `app/Services`, scoped permissions in `app/Policies`.
