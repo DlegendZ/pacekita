@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title', 'Organize')
+@section('content')
+<section class="page-hero shell"><span class="kicker">MAKE IT HAPPEN</span><h1>Lead the <em>way.</em></h1><p>Your club, your people, your next start line.</p></section><section class="section shell"><div class="section-head"><h2>Your clubs</h2><a class="button button-dark" href="{{ route('clubs.create') }}">Start a club ↗</a></div>@if($clubs->isEmpty())<div class="empty"><h3>No clubs to manage yet.</h3><p>Start a crew and build your first run.</p></div>@else<div class="card-grid">@foreach($clubs as $club)<article class="club-card"><span class="kicker">{{ $club->city }}</span><div class="club-symbol">↗</div><h3>{{ $club->name }}</h3><p>{{ Str::limit($club->description, 120) }}</p><div class="card-actions"><a class="link-arrow" href="{{ route('organizer.runs.index', $club) }}">Manage runs ↗</a><a href="{{ route('organizer.clubs.show', $club) }}">Members & settings</a></div></article>@endforeach</div>@endif</section>
+@endsection

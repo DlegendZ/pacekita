@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title', 'Runs · '.$club->name)
+@section('content')
+<section class="page-hero shell"><a class="back-link" href="{{ route('organizer.index') }}">← Organizer</a><span class="kicker">{{ $club->name }}</span><h1>Make a <em>move.</em></h1><p>Build a run, preview it, then publish.</p><a class="button button-dark" href="{{ route('organizer.runs.create', $club) }}">Create a run ↗</a></section><section class="section shell"><h2>Club runs</h2>@forelse($runs as $run)<article class="list-row"><div><span class="kicker">{{ $run->occurrences->count() }} OCCURRENCE(S)</span><h3>{{ $run->title }}</h3><p>{{ $run->description }}</p><div class="occurrence-links">@foreach($run->occurrences as $occurrence)<a href="{{ route('organizer.occurrences.edit', $occurrence) }}">{{ $occurrence->start_at_utc->timezone($occurrence->timezone)->format('M j, g:i A') }} · {{ ucfirst($occurrence->status) }} ↗</a>@endforeach</div></div></article>@empty<div class="empty"><h3>No runs yet.</h3><p>Every great crew starts somewhere.</p></div>@endforelse</section>
+@endsection
