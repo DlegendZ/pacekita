@@ -14,8 +14,10 @@ class EnsureActiveAccount
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
+
             return redirect()->route('login')->withErrors(['email' => 'Account suspended.']);
         }
+
         return $next($request);
     }
 }

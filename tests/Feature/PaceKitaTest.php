@@ -7,10 +7,16 @@ use App\Models\Run;
 use App\Models\RunOccurrence;
 use App\Models\User;
 use App\Notifications\RunNotice;
-use App\Services\RsvpService;
+use App\Policies\RunOccurrencePolicy;
 use App\Services\OccurrenceService;
+use App\Services\RsvpService;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class PaceKitaTest extends TestCase
@@ -25,12 +31,14 @@ class PaceKitaTest extends TestCase
             'join_policy' => 'open', 'status' => 'active',
         ], $attributes));
         $club->memberships()->create(['user_id' => $owner->id, 'role' => 'owner', 'status' => 'active']);
+
         return $club;
     }
 
     private function occurrence(Club $club, array $attributes = []): RunOccurrence
     {
         $run = Run::create(['club_id' => $club->id, 'creator_id' => $club->owner_id, 'title' => 'Easy 5K', 'description' => 'Morning easy run.', 'terrain' => 'Road', 'route_summary' => 'A loop in the park.']);
+
         return $run->occurrences()->create(array_merge([
             'start_at_utc' => now()->addDays(3), 'timezone' => 'Asia/Jakarta', 'duration_minutes' => 45,
             'distance_km' => 5, 'pace_min_seconds_per_km' => 300, 'pace_max_seconds_per_km' => 420,
@@ -60,9 +68,9 @@ class PaceKitaTest extends TestCase
         $this->assertTrue($first->hasVerifiedEmail());
         $this->assertSame('active', $first->status);
         $this->assertSame('published', $occurrence->status);
-        $this->assertTrue(app(\App\Policies\RunOccurrencePolicy::class)->view($first, $occurrence));
-        $this->assertTrue(app(\App\Policies\RunOccurrencePolicy::class)->reserve($first, $occurrence));
-        $this->assertTrue(\Illuminate\Support\Facades\Gate::forUser($first)->allows('reserve', $occurrence));
+        $this->assertTrue(app(RunOccurrencePolicy::class)->view($first, $occurrence));
+        $this->assertTrue(app(RunOccurrencePolicy::class)->reserve($first, $occurrence));
+        $this->assertTrue(Gate::forUser($first)->allows('reserve', $occurrence));
         $this->assertSame('confirmed', $service->reserve($first, $occurrence)->status);
         $this->assertSame('confirmed', $service->reserve($first, $occurrence)->status);
         $this->assertSame('waitlisted', $service->reserve($second, $occurrence)->status);
@@ -126,7 +134,7 @@ class PaceKitaTest extends TestCase
         ])->assertRedirect();
         foreach ($run->occurrences()->orderBy('id')->get() as $index => $future) {
             $this->assertSame('New park gate', $future->meeting_area);
-            $this->assertSame(\Carbon\Carbon::parse($originalStarts[$index])->addHour()->format('Y-m-d H:i:s'), $future->start_at_utc->format('Y-m-d H:i:s'));
+            $this->assertSame(Carbon::parse($originalStarts[$index])->addHour()->format('Y-m-d H:i:s'), $future->start_at_utc->format('Y-m-d H:i:s'));
         }
     }
 
@@ -152,7 +160,7 @@ class PaceKitaTest extends TestCase
     public function test_date_filter_uses_selected_local_timezone(): void
     {
         $club = $this->club(User::factory()->create());
-        $local = \Carbon\CarbonImmutable::now('Asia/Jakarta')->addDays(3)->startOfDay()->addHour();
+        $local = CarbonImmutable::now('Asia/Jakarta')->addDays(3)->startOfDay()->addHour();
         $this->occurrence($club, ['start_at_utc' => $local->utc()]);
         $this->get(route('runs.index', ['city' => 'jakarta', 'date' => $local->format('Y-m-d'), 'timezone' => 'Asia/Jakarta']))
             ->assertOk()->assertSee('1 found');
@@ -233,6 +241,27 @@ class PaceKitaTest extends TestCase
             'emergency_contact' => 'Call Sam at 0800000000',
         ])->assertRedirect();
         $this->assertSame('Call Sam at 0800000000', $runner->profile->emergency_contact);
-        $this->assertNotSame('Call Sam at 0800000000', \Illuminate\Support\Facades\DB::table('profiles')->where('user_id', $runner->id)->value('emergency_contact'));
+        $this->assertNotSame('Call Sam at 0800000000', DB::table('profiles')->where('user_id', $runner->id)->value('emergency_contact'));
+    }
+
+    public function test_registration_requires_email_verification_before_club_creation(): void
+    {
+        Notification::fake();
+        $this->post(route('register'), [
+            'name' => 'New Runner', 'email' => 'runner@example.test',
+            'password' => 'securepassword123', 'password_confirmation' => 'securepassword123',
+        ])->assertRedirect(route('verification.notice'));
+
+        $runner = User::where('email', 'runner@example.test')->firstOrFail();
+        $this->assertNull($runner->email_verified_at);
+        $this->assertSame('New Runner', $runner->profile->display_name);
+        $this->actingAs($runner)->get(route('clubs.create'))->assertRedirect(route('verification.notice'));
+
+        $link = URL::temporarySignedRoute('verification.verify', now()->addHour(), [
+            'id' => $runner->id, 'hash' => sha1($runner->email),
+        ]);
+        $this->get($link)->assertRedirect(route('dashboard'));
+        $this->assertTrue($runner->fresh()->hasVerifiedEmail());
+        $this->get(route('clubs.create'))->assertOk();
     }
 }

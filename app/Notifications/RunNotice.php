@@ -12,6 +12,7 @@ class RunNotice extends Notification implements ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
     public array $backoff = [30, 120, 600];
 
     public function __construct(public string $title, public string $message, public int $occurrenceId)
@@ -19,7 +20,10 @@ class RunNotice extends Notification implements ShouldQueue
         $this->afterCommit();
     }
 
-    public function via(object $notifiable): array { return ['database', 'mail']; }
+    public function via(object $notifiable): array
+    {
+        return ['database', 'mail'];
+    }
 
     public function toArray(object $notifiable): array
     {

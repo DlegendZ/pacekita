@@ -12,7 +12,13 @@ class ClubPolicy
         return $club->status === 'active' && ($club->visibility === 'public' || ($user && $club->hasMember($user)));
     }
 
-    public function manage(User $user, Club $club): bool { return $club->status === 'active' && $club->isOrganizer($user); }
+    public function manage(User $user, Club $club): bool
+    {
+        return $club->status === 'active' && $club->isOrganizer($user);
+    }
 
-    public function join(User $user, Club $club): bool { return $club->status === 'active' && $user->status === 'active' && $user->hasVerifiedEmail() && $club->visibility === 'public'; }
+    public function join(User $user, Club $club): bool
+    {
+        return $club->status === 'active' && $user->status === 'active' && $user->hasVerifiedEmail() && $club->visibility === 'public';
+    }
 }

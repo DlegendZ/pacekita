@@ -10,11 +10,25 @@ class Club extends Model
 {
     protected $fillable = ['owner_id', 'name', 'slug', 'city', 'description', 'visibility', 'join_policy', 'status'];
 
-    public function owner(): BelongsTo { return $this->belongsTo(User::class, 'owner_id'); }
-    public function memberships(): HasMany { return $this->hasMany(ClubMembership::class); }
-    public function runs(): HasMany { return $this->hasMany(Run::class); }
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_id');
+    }
 
-    public function getRouteKeyName(): string { return 'slug'; }
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(ClubMembership::class);
+    }
+
+    public function runs(): HasMany
+    {
+        return $this->hasMany(Run::class);
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
+    }
 
     public function isOrganizer(User $user): bool
     {

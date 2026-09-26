@@ -29,19 +29,24 @@ class OccurrenceService
             ]]);
             $this->generate($run);
         }
+
         return $occurrence;
     }
 
     public function generate(Run $run): void
     {
         $rule = $run->recurrence_rule;
-        if (! $rule || ($rule['frequency'] ?? null) !== 'weekly') return;
+        if (! $rule || ($rule['frequency'] ?? null) !== 'weekly') {
+            return;
+        }
         $local = CarbonImmutable::parse($rule['start_local'], $rule['timezone']);
         $limit = CarbonImmutable::parse($rule['until'], $rule['timezone'])->endOfDay();
         $horizon = CarbonImmutable::now($rule['timezone'])->addWeeks(8);
         $template = $run->occurrences()->oldest('start_at_utc')->firstOrFail();
         for ($next = $local->addWeek(); $next->lte($limit) && $next->lte($horizon); $next = $next->addWeek()) {
-            if ($next->isPast()) continue;
+            if ($next->isPast()) {
+                continue;
+            }
             $start = $next->utc();
             $run->occurrences()->firstOrCreate(['start_at_utc' => $start], [
                 'timezone' => $rule['timezone'], 'duration_minutes' => $template->duration_minutes,

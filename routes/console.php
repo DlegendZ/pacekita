@@ -1,14 +1,14 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schedule;
+use App\Models\Rsvp;
 use App\Models\Run;
 use App\Models\RunOccurrence;
-use App\Models\Rsvp;
 use App\Notifications\RunNotice;
 use App\Services\OccurrenceService;
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -25,7 +25,9 @@ Artisan::command('pacekita:send-reminders', function () {
             foreach ($rsvps as $rsvp) {
                 DB::transaction(function () use ($rsvp) {
                     $locked = Rsvp::lockForUpdate()->find($rsvp->id);
-                    if (! $locked || $locked->reminder_sent_at || $locked->status !== 'confirmed') return;
+                    if (! $locked || $locked->reminder_sent_at || $locked->status !== 'confirmed') {
+                        return;
+                    }
                     $locked->update(['reminder_sent_at' => now()]);
                     $rsvp->user->notify(new RunNotice('Your run is coming up', $rsvp->occurrence->run->title.' starts in less than 24 hours.', $rsvp->occurrence_id));
                 });

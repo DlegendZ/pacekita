@@ -12,7 +12,9 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        if (! app()->environment('local')) return;
+        if (! app()->environment('local')) {
+            return;
+        }
 
         $host = User::firstOrCreate(['email' => 'demo@pacekita.test'], [
             'name' => 'PaceKita Demo', 'password' => 'password12345', 'email_verified_at' => now(),

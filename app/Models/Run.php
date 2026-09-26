@@ -10,9 +10,23 @@ class Run extends Model
 {
     protected $fillable = ['club_id', 'creator_id', 'title', 'description', 'terrain', 'route_summary', 'recurrence_rule'];
 
-    protected function casts(): array { return ['recurrence_rule' => 'array']; }
+    protected function casts(): array
+    {
+        return ['recurrence_rule' => 'array'];
+    }
 
-    public function club(): BelongsTo { return $this->belongsTo(Club::class); }
-    public function creator(): BelongsTo { return $this->belongsTo(User::class, 'creator_id'); }
-    public function occurrences(): HasMany { return $this->hasMany(RunOccurrence::class); }
+    public function club(): BelongsTo
+    {
+        return $this->belongsTo(Club::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function occurrences(): HasMany
+    {
+        return $this->hasMany(RunOccurrence::class);
+    }
 }

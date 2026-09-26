@@ -19,8 +19,11 @@ class ReportController extends Controller
             'run' => RunOccurrence::findOrFail($data['target_id']),
             'user' => User::findOrFail($data['target_id']),
         };
-        if ($target instanceof Club || $target instanceof RunOccurrence) abort_unless(Gate::allows('view', $target), 404);
+        if ($target instanceof Club || $target instanceof RunOccurrence) {
+            abort_unless(Gate::allows('view', $target), 404);
+        }
         Report::create($data + ['reporter_id' => $request->user()->id]);
+
         return back()->with('status', 'Report received. Thank you.');
     }
 }

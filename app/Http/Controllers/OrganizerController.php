@@ -4,9 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Club;
-use App\Models\Run;
-use App\Models\RunOccurrence;
 use App\Models\Rsvp;
+use App\Models\RunOccurrence;
 use App\Notifications\RunNotice;
 use App\Services\OccurrenceService;
 use Carbon\CarbonImmutable;
@@ -20,18 +19,21 @@ class OrganizerController extends Controller
     public function index(Request $request)
     {
         $clubs = Club::whereHas('memberships', fn ($query) => $query->where('user_id', $request->user()->id)->where('status', 'active')->whereIn('role', ['organizer', 'owner']))->get();
+
         return view('organizer.index', compact('clubs'));
     }
 
     public function runs(Club $club)
     {
         Gate::authorize('manage', $club);
+
         return view('organizer.runs', ['club' => $club, 'runs' => $club->runs()->with(['occurrences' => fn ($query) => $query->orderBy('start_at_utc')])->latest()->get()]);
     }
 
     public function create(Club $club)
     {
         Gate::authorize('manage', $club);
+
         return view('organizer.create', compact('club'));
     }
 
@@ -50,12 +52,18 @@ class OrganizerController extends Controller
             'visibility' => 'required|in:public,members', 'repeat_until' => 'nullable|date_format:Y-m-d',
         ]);
         $start = CarbonImmutable::parse($data['start_local'], $data['timezone']);
-        if ($start->utc()->subHours((int) $data['cutoff_hours'])->isPast()) throw ValidationException::withMessages(['start_local' => 'Start and registration cutoff must be in the future.']);
-        if (! empty($data['repeat_until']) && CarbonImmutable::parse($data['repeat_until'], $data['timezone'])->endOfDay()->lt($start)) throw ValidationException::withMessages(['repeat_until' => 'End date must follow start.']);
+        if ($start->utc()->subHours((int) $data['cutoff_hours'])->isPast()) {
+            throw ValidationException::withMessages(['start_local' => 'Start and registration cutoff must be in the future.']);
+        }
+        if (! empty($data['repeat_until']) && CarbonImmutable::parse($data['repeat_until'], $data['timezone'])->endOfDay()->lt($start)) {
+            throw ValidationException::withMessages(['repeat_until' => 'End date must follow start.']);
+        }
         $occurrence = DB::transaction(function () use ($request, $club, $service, $data) {
             $run = $club->runs()->create($data + ['creator_id' => $request->user()->id]);
+
             return $service->create($run, $data);
         });
+
         return redirect()->route('organizer.occurrences.edit', $occurrence)->with('status', 'Draft saved. Preview then publish.');
     }
 
@@ -63,6 +71,7 @@ class OrganizerController extends Controller
     {
         Gate::authorize('manage', $occurrence);
         $occurrence->load('run.club');
+
         return view('organizer.edit', compact('occurrence'));
     }
 
@@ -86,14 +95,20 @@ class OrganizerController extends Controller
                 ? $selected->run->occurrences()->where('start_at_utc', '>=', $selected->start_at_utc)->whereIn('status', ['draft', 'published'])->orderBy('id')->lockForUpdate()->get()
                 : collect([$selected]);
             foreach ($targets as $target) {
-                if ($target->start_at_utc->isPast()) continue;
+                if ($target->start_at_utc->isPast()) {
+                    continue;
+                }
                 $count = $target->rsvps()->where('status', 'confirmed')->count();
-                if ($data['capacity'] < $count) throw ValidationException::withMessages(['capacity' => 'Capacity cannot be below confirmed places.']);
+                if ($data['capacity'] < $count) {
+                    throw ValidationException::withMessages(['capacity' => 'Capacity cannot be below confirmed places.']);
+                }
                 $local = $target->id === $selected->id ? $requested
                     : CarbonImmutable::parse($target->start_at_utc->timezone($target->timezone)->format('Y-m-d').' '.$requested->format('H:i'), $data['timezone'])->addDays($dayShift);
                 $start = $local->utc();
                 $cutoff = $start->subHours((int) $data['cutoff_hours']);
-                if ($cutoff->isPast()) throw ValidationException::withMessages(['start_local' => 'Registration cutoff must be in the future.']);
+                if ($cutoff->isPast()) {
+                    throw ValidationException::withMessages(['start_local' => 'Registration cutoff must be in the future.']);
+                }
                 $changed = ! $target->start_at_utc->equalTo($start) || $target->meeting_area !== $data['meeting_area'];
                 $target->update([
                     'start_at_utc' => $start, 'timezone' => $data['timezone'], 'cutoff_at_utc' => $cutoff,
@@ -113,6 +128,7 @@ class OrganizerController extends Controller
                 ])]);
             }
         }, 3);
+
         return back()->with('status', 'Run updated.');
     }
 
@@ -131,6 +147,7 @@ class OrganizerController extends Controller
             }
             AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.publish', 'subject_type' => 'run_occurrence', 'subject_id' => $locked->id]);
         });
+
         return redirect()->route('runs.show', $occurrence)->with('status', 'Run published.');
     }
 
@@ -146,8 +163,11 @@ class OrganizerController extends Controller
             $locked->update(['status' => 'canceled', 'cancellation_reason' => $data['reason']]);
             $locked->rsvps()->whereIn('status', ['confirmed', 'waitlisted'])->update(['status' => 'canceled']);
             AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.cancel', 'subject_type' => 'run_occurrence', 'subject_id' => $locked->id, 'metadata' => ['reason' => $data['reason']]]);
-            foreach ($recipients as $rsvp) $rsvp->user->notify(new RunNotice('Run canceled', $locked->run->title.' was canceled: '.$data['reason'], $locked->id));
+            foreach ($recipients as $rsvp) {
+                $rsvp->user->notify(new RunNotice('Run canceled', $locked->run->title.' was canceled: '.$data['reason'], $locked->id));
+            }
         }, 3);
+
         return redirect()->route('organizer.occurrences.edit', $occurrence)->with('status', 'Run canceled; attendees notified.');
     }
 
@@ -173,6 +193,7 @@ class OrganizerController extends Controller
     {
         Gate::authorize('manage', $occurrence);
         $rsvps = $occurrence->rsvps()->with('user.profile')->whereIn('status', ['confirmed', 'waitlisted', 'attended', 'absent'])->orderBy('waitlisted_at')->orderBy('id')->get();
+
         return view('organizer.roster', compact('occurrence', 'rsvps'));
     }
 
@@ -182,6 +203,7 @@ class OrganizerController extends Controller
         abort_unless($rsvp->occurrence_id === $occurrence->id && $rsvp->status === 'confirmed', 403);
         $data = $request->validate(['status' => 'required|in:attended,absent']);
         $rsvp->update(['status' => $data['status'], 'checked_in_at' => now()]);
+
         return back()->with('status', 'Attendance recorded.');
     }
 }

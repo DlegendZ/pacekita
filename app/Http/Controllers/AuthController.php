@@ -17,12 +17,15 @@ class AuthController extends Controller
     {
         $data = $request->validate(['name' => 'required|string|max:100', 'email' => 'required|email|max:255', 'password' => 'required|min:12|confirmed']);
         $data['email'] = Str::lower($data['email']);
-        if (User::where('email', $data['email'])->exists()) throw ValidationException::withMessages(['email' => 'Email already registered.']);
+        if (User::where('email', $data['email'])->exists()) {
+            throw ValidationException::withMessages(['email' => 'Email already registered.']);
+        }
         $user = User::create($data);
         $user->profile()->create(['display_name' => $user->name]);
         event(new Registered($user));
         Auth::login($user);
         $request->session()->regenerate();
+
         return redirect()->route('verification.notice');
     }
 
@@ -33,6 +36,7 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => 'Invalid credentials or account suspended.']);
         }
         $request->session()->regenerate();
+
         return redirect()->intended(route('dashboard'));
     }
 
@@ -41,19 +45,26 @@ class AuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
         return redirect()->route('home');
     }
 
     public function verify(Request $request)
     {
         abort_unless($request->user()->id === (int) $request->route('id') && hash_equals($request->route('hash'), sha1($request->user()->getEmailForVerification())), 403);
-        if (! $request->user()->hasVerifiedEmail()) $request->user()->markEmailAsVerified();
+        if (! $request->user()->hasVerifiedEmail()) {
+            $request->user()->markEmailAsVerified();
+        }
+
         return redirect()->route('dashboard')->with('status', 'Email verified.');
     }
 
     public function resend(Request $request)
     {
-        if (! $request->user()->hasVerifiedEmail()) $request->user()->sendEmailVerificationNotification();
+        if (! $request->user()->hasVerifiedEmail()) {
+            $request->user()->sendEmailVerificationNotification();
+        }
+
         return back()->with('status', 'Verification link sent.');
     }
 
@@ -61,6 +72,7 @@ class AuthController extends Controller
     {
         $request->validate(['email' => 'required|email']);
         Password::sendResetLink(['email' => Str::lower($request->email)]);
+
         return back()->with('status', 'If account exists, reset link has been sent.');
     }
 
@@ -70,6 +82,7 @@ class AuthController extends Controller
         $result = Password::reset($data, function (User $user, string $password) {
             $user->forceFill(['password' => Hash::make($password), 'remember_token' => Str::random(60)])->save();
         });
+
         return $result === Password::PASSWORD_RESET
             ? redirect()->route('login')->with('status', 'Password updated.')
             : back()->withErrors(['email' => __($result)]);
