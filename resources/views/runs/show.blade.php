@@ -32,6 +32,12 @@
         <h2>The route</h2><p>{{ $occurrence->run->route_summary }}</p>
         <h2>Where to meet</h2><p>{{ $occurrence->meeting_area }}</p>
         <h2>Good to know</h2><p>{{ $occurrence->safety_notes ?: 'Bring water, check conditions, and look out for one another.' }}</p>
+        @if($occurrence->updates->isNotEmpty())
+            <h2>Organizer updates</h2>
+            @foreach($occurrence->updates->sortByDesc('created_at') as $update)
+                <article class="list-row"><div><span class="kicker">{{ $update->created_at->timezone($occurrence->timezone)->format('M j, g:i A') }} {{ $occurrence->timezone }}</span><p>{{ $update->message }}</p></div></article>
+            @endforeach
+        @endif
         <p>Hosted by <a href="{{ route('clubs.show', $occurrence->run->club) }}">{{ $occurrence->run->club->name }}</a>.</p>
     </div>
     <aside class="booking-box">

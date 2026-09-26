@@ -151,6 +151,24 @@ class OrganizerController extends Controller
         return redirect()->route('organizer.occurrences.edit', $occurrence)->with('status', 'Run canceled; attendees notified.');
     }
 
+    public function announce(Request $request, RunOccurrence $occurrence)
+    {
+        Gate::authorize('manage', $occurrence);
+        $data = $request->validate(['message' => 'required|string|min:10|max:2000']);
+        DB::transaction(function () use ($request, $occurrence, $data) {
+            $locked = RunOccurrence::lockForUpdate()->findOrFail($occurrence->id);
+            Gate::authorize('manage', $locked);
+            abort_unless($locked->status === 'published' && $locked->start_at_utc->isFuture(), 409);
+            $update = $locked->updates()->create(['author_id' => $request->user()->id, 'message' => $data['message']]);
+            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.announce', 'subject_type' => 'run_update', 'subject_id' => $update->id]);
+            foreach ($locked->rsvps()->with('user')->whereIn('status', ['confirmed', 'waitlisted'])->get() as $rsvp) {
+                $rsvp->user->notify(new RunNotice('Update: '.$locked->run->title, $data['message'], $locked->id));
+            }
+        }, 3);
+
+        return back()->with('status', 'Update posted and attendees notified.');
+    }
+
     public function roster(RunOccurrence $occurrence)
     {
         Gate::authorize('manage', $occurrence);

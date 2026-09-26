@@ -14,6 +14,7 @@ class RunOccurrence extends Model
 
     public function run(): BelongsTo { return $this->belongsTo(Run::class); }
     public function rsvps(): HasMany { return $this->hasMany(Rsvp::class, 'occurrence_id'); }
+    public function updates(): HasMany { return $this->hasMany(RunUpdate::class, 'occurrence_id'); }
 
     public function isOpen(): bool
     {

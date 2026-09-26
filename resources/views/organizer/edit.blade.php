@@ -23,6 +23,15 @@
         @endif
     </div>
     @if(in_array($occurrence->status, ['draft', 'published']) && $occurrence->start_at_utc->isFuture())
+        @if($occurrence->status === 'published')
+            <form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.updates.store', $occurrence) }}">
+                @csrf
+                <h2>Post an update</h2>
+                <p>Confirmed and waitlisted runners receive this notice.</p>
+                <label>Message<textarea name="message" required minlength="10" maxlength="2000">{{ old('message') }}</textarea></label>
+                <button class="button button-dark" type="submit">Post update ↗</button>
+            </form>
+        @endif
         <form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.update', $occurrence) }}">
             @csrf @method('PATCH')
             <h2>Adjust details</h2>

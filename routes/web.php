@@ -65,6 +65,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/organizer/occurrences/{occurrence}', [OrganizerController::class, 'update'])->name('organizer.occurrences.update');
     Route::post('/organizer/occurrences/{occurrence}/publish', [OrganizerController::class, 'publish'])->name('organizer.occurrences.publish');
     Route::post('/organizer/occurrences/{occurrence}/cancel', [OrganizerController::class, 'cancel'])->name('organizer.occurrences.cancel');
+    Route::post('/organizer/occurrences/{occurrence}/updates', [OrganizerController::class, 'announce'])->name('organizer.occurrences.updates.store');
     Route::get('/organizer/occurrences/{occurrence}/roster', [OrganizerController::class, 'roster'])->name('organizer.occurrences.roster');
     Route::post('/organizer/occurrences/{occurrence}/check-in/{rsvp}', [OrganizerController::class, 'checkIn'])->name('organizer.occurrences.check-in');
 });

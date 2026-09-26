@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Club;
 use App\Models\RunOccurrence;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -29,10 +30,16 @@ class DiscoveryController extends Controller
             'city' => 'nullable|string|max:100', 'date' => 'nullable|date_format:Y-m-d',
             'distance' => 'nullable|numeric|min:0.1|max:500', 'pace' => 'nullable|integer|min:120|max:1800',
             'club' => 'nullable|integer|exists:clubs,id',
+            'timezone' => 'nullable|timezone',
         ]);
         $query = $this->publicRuns();
-        if (! empty($filters['city'])) $query->whereHas('run.club', fn ($q) => $q->where('city', 'like', '%'.$filters['city'].'%'));
-        if (! empty($filters['date'])) $query->whereDate('start_at_utc', $filters['date']);
+        if (! empty($filters['city'])) $query->whereHas('run.club', fn ($q) => $q->whereRaw('LOWER(clubs.city) LIKE ?', ['%'.mb_strtolower($filters['city']).'%']));
+        if (! empty($filters['date'])) {
+            $timezone = $filters['timezone'] ?? 'Asia/Jakarta';
+            $start = CarbonImmutable::parse($filters['date'].' 00:00:00', $timezone);
+            $query->where('start_at_utc', '>=', $start->utc())
+                ->where('start_at_utc', '<', $start->addDay()->utc());
+        }
         if (! empty($filters['distance'])) $query->where('distance_km', $filters['distance']);
         if (! empty($filters['pace'])) $query->where('pace_min_seconds_per_km', '<=', $filters['pace'])->where('pace_max_seconds_per_km', '>=', $filters['pace']);
         if (! empty($filters['club'])) $query->whereHas('run', fn ($q) => $q->where('club_id', $filters['club']));
@@ -41,7 +48,7 @@ class DiscoveryController extends Controller
 
     public function run(RunOccurrence $occurrence)
     {
-        $occurrence->load('run.club', 'run.creator');
+        $occurrence->load('run.club', 'run.creator', 'updates');
         abort_unless(Gate::allows('view', $occurrence), 404);
         $occurrence->loadCount(['rsvps as confirmed_count' => fn ($query) => $query->where('status', 'confirmed')]);
         $rsvp = auth()->check() ? $occurrence->rsvps()->where('user_id', auth()->id())->first() : null;

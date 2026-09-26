@@ -6,6 +6,7 @@ use App\Models\Club;
 use App\Models\Run;
 use App\Models\RunOccurrence;
 use App\Models\User;
+use App\Notifications\RunNotice;
 use App\Services\RsvpService;
 use App\Services\OccurrenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -146,5 +147,44 @@ class PaceKitaTest extends TestCase
         $runner = User::factory()->create(['status' => 'suspended']);
         $this->post(route('login'), ['email' => $runner->email, 'password' => 'password'])->assertSessionHasErrors('email');
         $this->actingAs($runner)->post(route('rsvps.store', $occurrence))->assertRedirect(route('login'));
+    }
+
+    public function test_date_filter_uses_selected_local_timezone(): void
+    {
+        $club = $this->club(User::factory()->create());
+        $local = \Carbon\CarbonImmutable::now('Asia/Jakarta')->addDays(3)->startOfDay()->addHour();
+        $this->occurrence($club, ['start_at_utc' => $local->utc()]);
+        $this->get(route('runs.index', ['city' => 'jakarta', 'date' => $local->format('Y-m-d'), 'timezone' => 'Asia/Jakarta']))
+            ->assertOk()->assertSee('1 found');
+        $this->get(route('runs.index', ['date' => $local->subDay()->format('Y-m-d'), 'timezone' => 'Asia/Jakarta']))
+            ->assertOk()->assertSee('0 found');
+    }
+
+    public function test_organizer_update_notifies_attendee_once_and_remains_visible(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create();
+        $runner = User::factory()->create();
+        $occurrence = $this->occurrence($this->club($owner));
+        app(RsvpService::class)->reserve($runner, $occurrence);
+        $message = 'Bring a light jacket because the morning will be cool.';
+        $this->actingAs($owner)->post(route('organizer.occurrences.updates.store', $occurrence), ['message' => $message])->assertRedirect();
+        $this->assertDatabaseHas('run_updates', ['occurrence_id' => $occurrence->id, 'message' => $message]);
+        Notification::assertSentToTimes($runner, RunNotice::class, 2);
+        $this->get(route('runs.show', $occurrence))->assertOk()->assertSee($message);
+        $outsider = User::factory()->create();
+        $this->actingAs($outsider)->post(route('organizer.occurrences.updates.store', $occurrence), ['message' => $message])->assertForbidden();
+    }
+
+    public function test_canceled_run_remains_visible_to_affected_runner(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create();
+        $runner = User::factory()->create();
+        $occurrence = $this->occurrence($this->club($owner));
+        app(RsvpService::class)->reserve($runner, $occurrence);
+        $this->actingAs($owner)->post(route('organizer.occurrences.cancel', $occurrence), ['reason' => 'Heavy rain makes the route unsafe.'])->assertRedirect();
+        $this->actingAs($runner)->get(route('runs.show', $occurrence))->assertOk()->assertSee('Run canceled')->assertSee('Heavy rain');
+        $this->get(route('runs.index'))->assertDontSee('Easy 5K');
     }
 }
