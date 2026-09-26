@@ -25,7 +25,7 @@ php artisan serve
 
 For an SQLite demo, set `DB_CONNECTION=sqlite` and `DB_DATABASE=/absolute/path/to/database/database.sqlite` in `.env`, create the empty database file, then migrate and seed. Seeder runs only in local environment. Demo organizer: `demo@pacekita.test` / `password12345`; change password or delete account before using real data. Mail uses log driver by default; verification links appear in `storage/logs/laravel.log`. Run `php artisan queue:work` and `php artisan schedule:work` in separate terminals for notifications, recurrence, and reminders.
 
-Docker alternative: after `composer install`, `npm ci`, `.env` creation, `php artisan key:generate`, and `npm run build`, run `docker compose up --build -d` then `docker compose exec web php artisan migrate --seed`. Open `http://localhost:8000`. Compose uses a local-only PostgreSQL password; do not reuse it in staging or production. Stop services with `docker compose down` (without `-v` if you want to keep demo data).
+Docker alternative: after `composer install`, `npm ci`, `.env` creation, `php artisan key:generate`, and `npm run build`, run `docker compose up --build -d` then `docker compose exec web php artisan db:seed`. Compose runs migrations before starting web, worker, or scheduler. Open `http://localhost:8000`. Compose uses a local-only PostgreSQL password; do not reuse it in staging or production. Stop services with `docker compose down` (without `-v` if you want to keep demo data).
 
 ## Test
 

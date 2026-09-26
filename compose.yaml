@@ -12,11 +12,9 @@ services:
       interval: 5s
       retries: 10
 
-  web:
+  init:
     build: .
-    command: php artisan serve --host=0.0.0.0 --port=8000
-    ports:
-      - "8000:8000"
+    command: php artisan migrate --force
     volumes:
       - .:/app
     environment: &app-environment
@@ -30,15 +28,28 @@ services:
       db:
         condition: service_healthy
 
+  web:
+    build: .
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment: *app-environment
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
   worker:
     build: .
     command: php artisan queue:work --tries=3
     volumes:
       - .:/app
     environment: *app-environment
+    restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
+      init:
+        condition: service_completed_successfully
 
   scheduler:
     build: .
@@ -47,8 +58,8 @@ services:
       - .:/app
     environment: *app-environment
     depends_on:
-      db:
-        condition: service_healthy
+      init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
