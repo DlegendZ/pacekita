@@ -1,5 +1,46 @@
 @extends('layouts.app')
 @section('title', 'Manage '.$occurrence->run->title)
 @section('content')
-<div class="shell narrow-page"><a class="back-link" href="{{ route('organizer.runs.index', $occurrence->run->club) }}">← All club runs</a><span class="kicker">{{ strtoupper($occurrence->status) }} · RUN #{{ $occurrence->id }}</span><h1>{{ $occurrence->run->title }}</h1><p>{{ $occurrence->start_at_utc->timezone($occurrence->timezone)->format('l, F j, Y · g:i A') }} {{ $occurrence->timezone }}</p><div class="toolbar"><a class="button button-outline-dark" href="{{ route('organizer.occurrences.roster', $occurrence) }}">View roster ↗</a>@if($occurrence->status === 'published')<a class="button button-dark" href="{{ route('runs.show', $occurrence) }}">View live page ↗</a>@endif</div><div class="form-card"><h2>Preview</h2><p><strong>{{ $occurrence->distance_km }} km</strong> · {{ $occurrence->run->terrain }} · {{ $occurrence->capacity }} places</p><p>{{ $occurrence->run->route_summary }}</p><p>Meet at {{ $occurrence->meeting_area }}. Registration closes {{ $occurrence->cutoff_at_utc->timezone($occurrence->timezone)->format('M j, g:i A') }} {{ $occurrence->timezone }}.</p><p>{{ $occurrence->safety_notes }}</p>@if($occurrence->status === 'draft')<form method="post" action="{{ route('organizer.occurrences.publish', $occurrence) }}">@csrf<button class="button button-lime" type="submit">Publish this run ↗</button></form>@endif</div>@if(in_array($occurrence->status, ['draft', 'published']) && $occurrence->start_at_utc->isFuture())<form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.update', $occurrence) }}">@csrf @method('PATCH')<h2>Adjust details</h2><label>Meeting area<input name="meeting_area" value="{{ $occurrence->meeting_area }}" required></label><label>Safety notes<textarea name="safety_notes">{{ $occurrence->safety_notes }}</textarea></label><label>Capacity<input type="number" name="capacity" value="{{ $occurrence->capacity }}" min="1" required></label><button class="button button-dark" type="submit">Save changes</button></form><form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.cancel', $occurrence) }}" onsubmit="return confirm('Cancel this occurrence and notify attendees?')">@csrf<h2>Cancel occurrence</h2><label>Reason (shared with attendees)<textarea name="reason" required minlength="10" maxlength="1000"></textarea></label><button class="button button-outline-dark" type="submit">Cancel run</button></form>@endif</div>
+<div class="shell narrow-page">
+    <a class="back-link" href="{{ route('organizer.runs.index', $occurrence->run->club) }}">← All club runs</a>
+    <span class="kicker">{{ strtoupper($occurrence->status) }} · RUN #{{ $occurrence->id }}</span>
+    <h1>{{ $occurrence->run->title }}</h1>
+    <p>{{ $occurrence->start_at_utc->timezone($occurrence->timezone)->format('l, F j, Y · g:i A') }} {{ $occurrence->timezone }}</p>
+    <div class="toolbar">
+        <a class="button button-outline-dark" href="{{ route('organizer.occurrences.roster', $occurrence) }}">View roster ↗</a>
+        @if($occurrence->status === 'published')<a class="button button-dark" href="{{ route('runs.show', $occurrence) }}">View live page ↗</a>@endif
+    </div>
+    <div class="form-card">
+        <h2>Preview</h2>
+        <p><strong>{{ $occurrence->distance_km }} km</strong> · {{ $occurrence->run->terrain }} · {{ $occurrence->capacity }} places</p>
+        <p>{{ $occurrence->run->route_summary }}</p>
+        <p>Meet at {{ $occurrence->meeting_area }}. Registration closes {{ $occurrence->cutoff_at_utc->timezone($occurrence->timezone)->format('M j, g:i A') }} {{ $occurrence->timezone }}.</p>
+        <p>{{ $occurrence->safety_notes }}</p>
+        @if($occurrence->status === 'draft')
+            <form method="post" action="{{ route('organizer.occurrences.publish', $occurrence) }}">
+                @csrf <button class="button button-lime" type="submit">Publish {{ $occurrence->run->recurrence_rule ? 'series' : 'run' }} ↗</button>
+            </form>
+        @endif
+    </div>
+    @if(in_array($occurrence->status, ['draft', 'published']) && $occurrence->start_at_utc->isFuture())
+        <form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.update', $occurrence) }}">
+            @csrf @method('PATCH')
+            <h2>Adjust details</h2>
+            <label>Local start<input type="datetime-local" name="start_local" value="{{ old('start_local', $occurrence->start_at_utc->timezone($occurrence->timezone)->format('Y-m-d\TH:i')) }}" required></label>
+            <label>Timezone (IANA)<input name="timezone" value="{{ old('timezone', $occurrence->timezone) }}" required></label>
+            <label>Registration cutoff (hours before start)<input type="number" name="cutoff_hours" min="0" max="168" value="{{ old('cutoff_hours', (int) $occurrence->cutoff_at_utc->diffInHours($occurrence->start_at_utc)) }}" required></label>
+            <label>Meeting area<input name="meeting_area" value="{{ old('meeting_area', $occurrence->meeting_area) }}" required></label>
+            <label>Safety notes<textarea name="safety_notes">{{ old('safety_notes', $occurrence->safety_notes) }}</textarea></label>
+            <label>Capacity<input type="number" name="capacity" value="{{ old('capacity', $occurrence->capacity) }}" min="1" required></label>
+            <label>Apply to<select name="scope"><option value="occurrence">This occurrence</option>@if($occurrence->run->recurrence_rule)<option value="future">This and future occurrences</option>@endif</select></label>
+            <button class="button button-dark" type="submit">Save changes</button>
+        </form>
+        <form class="form-card form-stack" method="post" action="{{ route('organizer.occurrences.cancel', $occurrence) }}" onsubmit="return confirm('Cancel this occurrence and notify attendees?')">
+            @csrf
+            <h2>Cancel occurrence</h2>
+            <label>Reason (shared with attendees)<textarea name="reason" required minlength="10" maxlength="1000"></textarea></label>
+            <button class="button button-outline-dark" type="submit">Cancel run</button>
+        </form>
+    @endif
+</div>
 @endsection

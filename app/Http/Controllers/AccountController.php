@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Rsvp;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
@@ -36,5 +38,20 @@ class AccountController extends Controller
         $notices = $request->user()->notifications()->latest()->paginate(20);
         $request->user()->unreadNotifications()->update(['read_at' => now()]);
         return view('notices', compact('notices'));
+    }
+
+    public function requestDeletion(Request $request)
+    {
+        $request->validate(['confirm' => 'required|accepted']);
+        DB::transaction(function () use ($request) {
+            $existing = DB::table('account_deletion_requests')->where('user_id', $request->user()->id)->first();
+            if ($existing) return;
+            DB::table('account_deletion_requests')->insert([
+                'user_id' => $request->user()->id, 'status' => 'pending',
+                'requested_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'account.deletion_requested', 'subject_type' => 'user', 'subject_id' => $request->user()->id]);
+        });
+        return back()->with('status', 'Deletion request recorded. We will review retention obligations and contact you.');
     }
 }

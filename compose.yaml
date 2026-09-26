@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: pacekita
+      POSTGRES_USER: pacekita
+      POSTGRES_PASSWORD: pacekita_dev_only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U pacekita -d pacekita"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment: &app-environment
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: pacekita
+      DB_USERNAME: pacekita
+      DB_PASSWORD: pacekita_dev_only
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: php artisan queue:work --tries=3
+    volumes:
+      - .:/app
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+
+  scheduler:
+    build: .
+    command: php artisan schedule:work
+    volumes:
+      - .:/app
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -7,6 +7,7 @@ use App\Models\Run;
 use App\Models\RunOccurrence;
 use App\Models\User;
 use App\Services\RsvpService;
+use App\Services\OccurrenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -98,5 +99,52 @@ class PaceKitaTest extends TestCase
         $this->actingAs($owner)->post(route('organizer.occurrences.cancel', $occurrence), ['reason' => 'Unsafe weather conditions'])->assertRedirect();
         $this->assertSame('canceled', $occurrence->fresh()->status);
         $this->assertDatabaseHas('audit_logs', ['subject_id' => $occurrence->id, 'action' => 'occurrence.cancel']);
+    }
+
+    public function test_weekly_series_publishes_future_occurrences(): void
+    {
+        $owner = User::factory()->create();
+        $club = $this->club($owner);
+        $run = Run::create(['club_id' => $club->id, 'creator_id' => $owner->id, 'title' => 'Weekly 5K', 'description' => 'Every week.', 'terrain' => 'Road', 'route_summary' => 'Park loop.']);
+        $start = now('Asia/Jakarta')->addDays(3);
+        $occurrence = app(OccurrenceService::class)->create($run, [
+            'start_local' => $start->format('Y-m-d\TH:i'), 'timezone' => 'Asia/Jakarta', 'duration_minutes' => 60,
+            'distance_km' => 5, 'pace_min_seconds_per_km' => 300, 'pace_max_seconds_per_km' => 420,
+            'meeting_area' => 'Park gate', 'capacity' => 20, 'cutoff_hours' => 2,
+            'visibility' => 'public', 'repeat_until' => $start->addWeeks(3)->format('Y-m-d'),
+        ]);
+        $this->assertGreaterThan(1, $run->occurrences()->count());
+        $this->actingAs($owner)->post(route('organizer.occurrences.publish', $occurrence))->assertRedirect();
+        $this->assertSame(0, $run->occurrences()->where('status', 'draft')->count());
+        $originalStarts = $run->occurrences()->orderBy('id')->pluck('start_at_utc')->all();
+        $updatedLocal = $occurrence->start_at_utc->timezone('Asia/Jakarta')->addHour();
+        $this->actingAs($owner)->patch(route('organizer.occurrences.update', $occurrence), [
+            'start_local' => $updatedLocal->format('Y-m-d\TH:i'), 'timezone' => 'Asia/Jakarta',
+            'cutoff_hours' => 2, 'scope' => 'future', 'meeting_area' => 'New park gate',
+            'capacity' => 20,
+        ])->assertRedirect();
+        foreach ($run->occurrences()->orderBy('id')->get() as $index => $future) {
+            $this->assertSame('New park gate', $future->meeting_area);
+            $this->assertSame(\Carbon\Carbon::parse($originalStarts[$index])->addHour()->format('Y-m-d H:i:s'), $future->start_at_utc->format('Y-m-d H:i:s'));
+        }
+    }
+
+    public function test_deletion_request_is_recorded_once_and_admin_can_review(): void
+    {
+        $runner = User::factory()->create();
+        $this->actingAs($runner)->post(route('account.deletion-request'), ['confirm' => '1'])->assertRedirect();
+        $this->actingAs($runner)->post(route('account.deletion-request'), ['confirm' => '1'])->assertRedirect();
+        $this->assertDatabaseCount('account_deletion_requests', 1);
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->get(route('admin.index'))->assertOk()->assertSee('Deletion requests');
+    }
+
+    public function test_suspended_runner_cannot_log_in_or_reserve(): void
+    {
+        $owner = User::factory()->create();
+        $occurrence = $this->occurrence($this->club($owner));
+        $runner = User::factory()->create(['status' => 'suspended']);
+        $this->post(route('login'), ['email' => $runner->email, 'password' => 'password'])->assertSessionHasErrors('email');
+        $this->actingAs($runner)->post(route('rsvps.store', $occurrence))->assertRedirect(route('login'));
     }
 }

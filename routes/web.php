@@ -38,8 +38,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [AccountController::class, 'dashboard'])->name('dashboard');
     Route::get('/profile', [AccountController::class, 'profile'])->name('profile.edit');
     Route::patch('/profile', [AccountController::class, 'updateProfile'])->name('profile.update');
+    Route::post('/account/deletion-request', [AccountController::class, 'requestDeletion'])->name('account.deletion-request');
     Route::get('/notices', [AccountController::class, 'notices'])->name('notices.index');
     Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
+    Route::patch('/admin/actions', [AdminController::class, 'action'])->name('admin.actions');
     Route::patch('/admin/reports/{report}', [AdminController::class, 'review'])->name('admin.reports.review');
     Route::patch('/admin/users/{user}', [AdminController::class, 'suspend'])->name('admin.users.status');
     Route::patch('/admin/clubs/{club}/hide', [AdminController::class, 'hideClub'])->name('admin.clubs.hide');

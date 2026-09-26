@@ -7,6 +7,7 @@ use App\Models\Club;
 use App\Models\Report;
 use App\Models\RunOccurrence;
 use App\Models\User;
+use App\Notifications\RunNotice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,7 @@ class AdminController extends Controller
         $this->guard($request);
         return view('admin.index', [
             'reports' => Report::latest()->paginate(20), 'audits' => AuditLog::latest('created_at')->limit(30)->get(),
+            'deletionRequests' => DB::table('account_deletion_requests')->where('status', 'pending')->orderBy('requested_at')->get(),
         ]);
     }
 
@@ -31,6 +33,17 @@ class AdminController extends Controller
             AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'report.review', 'subject_type' => 'report', 'subject_id' => $report->id, 'metadata' => ['status' => $data['status'], 'reason' => $data['reason']]]);
         });
         return back()->with('status', 'Report reviewed.');
+    }
+
+    public function action(Request $request)
+    {
+        $this->guard($request);
+        $data = $request->validate(['kind' => 'required|in:user,club,run', 'target_id' => 'required|string|max:255']);
+        return match ($data['kind']) {
+            'user' => $this->suspend($request, User::findOrFail($data['target_id'])),
+            'club' => $this->hideClub($request, Club::where('slug', $data['target_id'])->firstOrFail()),
+            'run' => $this->unpublish($request, RunOccurrence::findOrFail($data['target_id'])),
+        };
     }
 
     public function suspend(Request $request, User $user)
@@ -61,9 +74,14 @@ class AdminController extends Controller
         $this->guard($request);
         $data = $request->validate(['reason' => 'required|string|min:5|max:1000']);
         DB::transaction(function () use ($request, $occurrence, $data) {
-            $occurrence->update(['status' => 'canceled', 'cancellation_reason' => $data['reason']]);
-            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.unpublish', 'subject_type' => 'run_occurrence', 'subject_id' => $occurrence->id, 'metadata' => $data]);
-        });
+            $locked = RunOccurrence::lockForUpdate()->findOrFail($occurrence->id);
+            abort_if(in_array($locked->status, ['canceled', 'completed'], true), 409);
+            $recipients = $locked->rsvps()->with('user')->whereIn('status', ['confirmed', 'waitlisted'])->get();
+            $locked->update(['status' => 'canceled', 'cancellation_reason' => $data['reason']]);
+            $locked->rsvps()->whereIn('status', ['confirmed', 'waitlisted'])->update(['status' => 'canceled']);
+            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.unpublish', 'subject_type' => 'run_occurrence', 'subject_id' => $locked->id, 'metadata' => $data]);
+            foreach ($recipients as $rsvp) $rsvp->user->notify(new RunNotice('Run canceled', $locked->run->title.' was removed: '.$data['reason'], $locked->id));
+        }, 3);
         return back()->with('status', 'Run unpublished.');
     }
 }

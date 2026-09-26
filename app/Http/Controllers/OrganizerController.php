@@ -71,21 +71,46 @@ class OrganizerController extends Controller
         Gate::authorize('manage', $occurrence);
         abort_unless(in_array($occurrence->status, ['draft', 'published'], true) && $occurrence->start_at_utc->isFuture(), 409);
         $data = $request->validate([
+            'start_local' => 'required|date_format:Y-m-d\TH:i', 'timezone' => 'required|timezone',
+            'cutoff_hours' => 'required|integer|min:0|max:168', 'scope' => 'required|in:occurrence,future',
             'meeting_area' => 'required|string|max:255', 'safety_notes' => 'nullable|string|max:2000',
             'capacity' => 'required|integer|min:1|max:10000',
         ]);
         DB::transaction(function () use ($request, $occurrence, $data) {
-            $locked = RunOccurrence::lockForUpdate()->findOrFail($occurrence->id);
-            Gate::authorize('manage', $locked);
-            $count = $locked->rsvps()->where('status', 'confirmed')->count();
-            if ($data['capacity'] < $count) throw ValidationException::withMessages(['capacity' => 'Capacity cannot be below confirmed places.']);
-            $old = $locked->meeting_area;
-            $locked->update($data);
-            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.update', 'subject_type' => 'run_occurrence', 'subject_id' => $locked->id, 'metadata' => ['meeting_area_changed' => $old !== $locked->meeting_area]]);
-            if ($old !== $locked->meeting_area && $locked->status === 'published') {
-                foreach ($locked->rsvps()->with('user')->whereIn('status', ['confirmed', 'waitlisted'])->get() as $rsvp) {
-                    $rsvp->user->notify(new RunNotice('Meeting area changed', $locked->run->title.' now meets at '.$locked->meeting_area.'.', $locked->id));
+            $selected = RunOccurrence::lockForUpdate()->findOrFail($occurrence->id);
+            Gate::authorize('manage', $selected);
+            $requested = CarbonImmutable::parse($data['start_local'], $data['timezone']);
+            $oldLocal = $selected->start_at_utc->timezone($selected->timezone);
+            $dayShift = (int) round($oldLocal->startOfDay()->diffInDays($requested->startOfDay(), false));
+            $targets = $data['scope'] === 'future' && $selected->run->recurrence_rule
+                ? $selected->run->occurrences()->where('start_at_utc', '>=', $selected->start_at_utc)->whereIn('status', ['draft', 'published'])->orderBy('id')->lockForUpdate()->get()
+                : collect([$selected]);
+            foreach ($targets as $target) {
+                if ($target->start_at_utc->isPast()) continue;
+                $count = $target->rsvps()->where('status', 'confirmed')->count();
+                if ($data['capacity'] < $count) throw ValidationException::withMessages(['capacity' => 'Capacity cannot be below confirmed places.']);
+                $local = $target->id === $selected->id ? $requested
+                    : CarbonImmutable::parse($target->start_at_utc->timezone($target->timezone)->format('Y-m-d').' '.$requested->format('H:i'), $data['timezone'])->addDays($dayShift);
+                $start = $local->utc();
+                $cutoff = $start->subHours((int) $data['cutoff_hours']);
+                if ($cutoff->isPast()) throw ValidationException::withMessages(['start_local' => 'Registration cutoff must be in the future.']);
+                $changed = ! $target->start_at_utc->equalTo($start) || $target->meeting_area !== $data['meeting_area'];
+                $target->update([
+                    'start_at_utc' => $start, 'timezone' => $data['timezone'], 'cutoff_at_utc' => $cutoff,
+                    'meeting_area' => $data['meeting_area'], 'safety_notes' => $data['safety_notes'] ?? null, 'capacity' => $data['capacity'],
+                ]);
+                AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.update', 'subject_type' => 'run_occurrence', 'subject_id' => $target->id, 'metadata' => ['logistics_changed' => $changed]]);
+                if ($changed && $target->status === 'published') {
+                    foreach ($target->rsvps()->with('user')->whereIn('status', ['confirmed', 'waitlisted'])->get() as $rsvp) {
+                        $rsvp->user->notify(new RunNotice('Run details changed', $target->run->title.' now starts '.$local->format('M j, g:i A').' '.$data['timezone'].' at '.$target->meeting_area.'.', $target->id));
+                    }
                 }
+            }
+            if ($data['scope'] === 'future' && $selected->run->recurrence_rule) {
+                $selected->run->update(['recurrence_rule' => array_merge($selected->run->recurrence_rule, [
+                    'start_local' => $requested->format('Y-m-d H:i:s'), 'timezone' => $data['timezone'],
+                    'cutoff_hours' => (int) $data['cutoff_hours'],
+                ])]);
             }
         }, 3);
         return back()->with('status', 'Run updated.');
@@ -95,8 +120,17 @@ class OrganizerController extends Controller
     {
         Gate::authorize('manage', $occurrence);
         abort_unless($occurrence->status === 'draft' && $occurrence->cutoff_at_utc->isFuture(), 409);
-        $occurrence->update(['status' => 'published']);
-        AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.publish', 'subject_type' => 'run_occurrence', 'subject_id' => $occurrence->id]);
+        DB::transaction(function () use ($request, $occurrence) {
+            $locked = RunOccurrence::lockForUpdate()->findOrFail($occurrence->id);
+            Gate::authorize('manage', $locked);
+            abort_unless($locked->status === 'draft' && $locked->cutoff_at_utc->isFuture(), 409);
+            if ($locked->run->recurrence_rule) {
+                $locked->run->occurrences()->where('status', 'draft')->where('cutoff_at_utc', '>', now())->update(['status' => 'published']);
+            } else {
+                $locked->update(['status' => 'published']);
+            }
+            AuditLog::create(['actor_id' => $request->user()->id, 'action' => 'occurrence.publish', 'subject_type' => 'run_occurrence', 'subject_id' => $locked->id]);
+        });
         return redirect()->route('runs.show', $occurrence)->with('status', 'Run published.');
     }
 
