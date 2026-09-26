@@ -187,4 +187,52 @@ class PaceKitaTest extends TestCase
         $this->actingAs($runner)->get(route('runs.show', $occurrence))->assertOk()->assertSee('Run canceled')->assertSee('Heavy rain');
         $this->get(route('runs.index'))->assertDontSee('Easy 5K');
     }
+
+    public function test_approval_membership_controls_member_only_runs(): void
+    {
+        $owner = User::factory()->create();
+        $club = $this->club($owner, ['join_policy' => 'approval']);
+        $occurrence = $this->occurrence($club, ['visibility' => 'members']);
+        $runner = User::factory()->create();
+
+        $this->actingAs($runner)->post(route('clubs.join', $club))->assertRedirect();
+        $membership = $club->memberships()->where('user_id', $runner->id)->firstOrFail();
+        $this->assertSame('pending', $membership->status);
+        $this->actingAs($runner)->post(route('clubs.join', $club))->assertRedirect();
+        $this->assertSame(1, $club->memberships()->where('user_id', $runner->id)->count());
+        $this->actingAs($runner)->get(route('runs.show', $occurrence))->assertNotFound();
+
+        $otherOwner = User::factory()->create();
+        $this->club($otherOwner);
+        $this->actingAs($otherOwner)->patch(route('organizer.memberships.update', [$club, $membership]), ['status' => 'active'])->assertForbidden();
+        $this->actingAs($owner)->patch(route('organizer.memberships.update', [$club, $membership]), ['status' => 'active'])->assertRedirect();
+        $this->actingAs($runner)->get(route('runs.show', $occurrence))->assertOk();
+        $this->assertDatabaseHas('audit_logs', ['action' => 'membership.decide', 'subject_id' => $membership->id]);
+    }
+
+    public function test_capacity_cannot_drop_below_confirmed_places(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create();
+        $occurrence = $this->occurrence($this->club($owner), ['capacity' => 2]);
+        app(RsvpService::class)->reserve(User::factory()->create(), $occurrence);
+        app(RsvpService::class)->reserve(User::factory()->create(), $occurrence);
+        $this->actingAs($owner)->patch(route('organizer.occurrences.update', $occurrence), [
+            'start_local' => $occurrence->start_at_utc->timezone($occurrence->timezone)->format('Y-m-d\TH:i'),
+            'timezone' => $occurrence->timezone, 'cutoff_hours' => 2, 'scope' => 'occurrence',
+            'meeting_area' => 'Park gate', 'capacity' => 1,
+        ])->assertSessionHasErrors('capacity');
+        $this->assertSame(2, $occurrence->fresh()->capacity);
+    }
+
+    public function test_profile_emergency_contact_is_encrypted_at_rest(): void
+    {
+        $runner = User::factory()->create();
+        $this->actingAs($runner)->patch(route('profile.update'), [
+            'display_name' => 'Runner One', 'city' => 'Jakarta',
+            'emergency_contact' => 'Call Sam at 0800000000',
+        ])->assertRedirect();
+        $this->assertSame('Call Sam at 0800000000', $runner->profile->emergency_contact);
+        $this->assertNotSame('Call Sam at 0800000000', \Illuminate\Support\Facades\DB::table('profiles')->where('user_id', $runner->id)->value('emergency_contact'));
+    }
 }
